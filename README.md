@@ -1,6 +1,10 @@
-# Ember::Resource
+# Ember Resource asset pipeline
 
-TODO: Write a gem description
+A version of the ember-resource javascript library packaged for the asset pipeline in rails.
+
+Original project is https://github.com/staugaard/ember-resource 
+Version taken at commit 3a67468faf03a2866303b640e75daceb4a60ac11
+
 
 ## Installation
 
@@ -18,7 +22,9 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+Simply add to your assets group in a rails application and then add the line
+//= require ember-resource
+to your application's javascript manifest
 
 ## Contributing
 
