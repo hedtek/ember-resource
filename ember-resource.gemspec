@@ -2,10 +2,10 @@
 require File.expand_path('../lib/ember-resource/version', __FILE__)
 
 Gem::Specification.new do |gem|
-  gem.authors       = ["David Workman"]
-  gem.email         = ["workmad3@gmail.com"]
-  gem.description   = %q{TODO: Write a gem description}
-  gem.summary       = %q{TODO: Write a gem summary}
+  gem.authors       = ["David Workman", "Hedtek Ltd."]
+  gem.email         = ["david@hedtek.com"]
+  gem.description   = %q{Ember resource asset pipeline}
+  gem.summary       = %q{Ember resource asset pipeline}
   gem.homepage      = ""
 
   gem.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
