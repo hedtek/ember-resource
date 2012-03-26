@@ -3,7 +3,7 @@ require File.expand_path('../lib/ember-resource/version', __FILE__)
 
 Gem::Specification.new do |gem|
   gem.authors       = ["David Workman", "Hedtek Ltd."]
-  gem.email         = ["david@hedtek.com"]
+  gem.email         = ["gems@hedtek.com"]
   gem.description   = %q{Ember resource asset pipeline}
   gem.summary       = %q{Ember resource asset pipeline}
   gem.homepage      = ""
