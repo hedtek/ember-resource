@@ -4,7 +4,7 @@ A version of the ember-resource javascript library packaged for the asset pipeli
 
 Original project is https://github.com/staugaard/ember-resource 
 
-Version taken at commit 3a67468faf03a2866303b640e75daceb4a60ac11
+Version taken at commit c34fa3bfadfe82481f5a97329734ed4394bb1dc0
 
 
 ## Installation

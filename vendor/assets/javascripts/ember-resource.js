@@ -1,7 +1,5 @@
 (function(undefined) {
 
-  window.Ember = window.Ember || window.SC;
-
   var expandSchema, expandSchemaItem, createSchemaProperties,
       mergeSchemas;
 
@@ -12,13 +10,6 @@
   function isObject(obj) {
     return obj === Object(obj);
   }
-
-  function K() {};
-
-  Ember.Resource = Ember.Object.extend({
-    resourcePropertyWillChange: K,
-    resourcePropertyDidChange: K
-  });
 
   Ember.Resource.deepSet = function(obj, path, value) {
     if (Ember.typeOf(path) === 'string') {
@@ -561,25 +552,23 @@
   //       resource; // another way to reference the resource object
   //     }
   //
-  var errorHandlerWithModel = function(errorHandler, resource) {
+  var errorHandlerWithContext = function(errorHandler, context) {
     return function() {
       var args = Array.prototype.slice.call(arguments, 0);
-      args.push(resource);
-      errorHandler.apply(resource, args);
+      args.push(context);
+      errorHandler.apply(context, args);
     };
   };
 
   Ember.Resource.ajax = function(options) {
+    if(window.stopHere) { debugger }
     options.dataType = options.dataType || 'json';
     options.type     = options.type     || 'GET';
 
-    if (!options.error && Ember.Resource.errorHandler) {
-      if (options.resource) {
-        options.error = errorHandlerWithModel(Ember.Resource.errorHandler, options.resource);
-        delete options.resource;
-      } else {
-        options.error = Ember.Resource.errorHandler;
-      }
+    if(options.error) {
+      options.error = errorHandlerWithContext(options.error, options);
+    } else if(Em.Resource.errorHandler) {
+      options.error = errorHandlerWithContext(Ember.Resource.errorHandler, options);
     }
 
     return $.ajax(options);
@@ -754,6 +743,13 @@
     willSave: function() {},
     didSave: function() {},
 
+    fetched: function() {
+      if(!this._fetchDfd) {
+        this._fetchDfd = $.Deferred();
+      }
+      return this._fetchDfd;
+    },
+
     fetch: function() {
       if (!Ember.get(this, 'isFetchable')) return $.when();
 
@@ -770,6 +766,8 @@
 
       this.deferedFetch = Ember.Resource.ajax({
         url: url,
+        resource: this,
+        operation: 'read',
         success: function(json) {
           self.updateWithApiData(json);
         }
@@ -778,6 +776,7 @@
       this.deferedFetch.always(function() {
         self.didFetch.call(self);
         Ember.sendEvent(self, 'didFetch');
+        self.fetched().resolve();
       });
 
       return this.deferedFetch;
@@ -825,9 +824,11 @@
       if (Ember.get(this, 'isNew')) {
         ajaxOptions.type = 'POST';
         ajaxOptions.url = this.constructor.resourceURL();
+        ajaxOptions.operation = 'create';
       } else {
         ajaxOptions.type = 'PUT';
         ajaxOptions.url = this.resourceURL();
+        ajaxOptions.operation = 'update';
       }
 
       var self = this;
@@ -864,6 +865,8 @@
       Ember.set(this, 'resourceState', Ember.Resource.Lifecycle.DESTROYING);
       return Ember.Resource.ajax({
         type: 'DELETE',
+        resource: this,
+        operation: 'destroy',
         url:  this.resourceURL(),
         resource: this
       }).done(function() {
@@ -939,15 +942,16 @@
 
       if (klass === this) {
         var instance;
-        this.identityMap = this.identityMap || {};
+        this.identityMap = this.identityMap || new Ember.Resource.IdentityMap(this.identityMapLimit);
 
         var id = data.id || options.id;
         if (id && !options.skipIdentityMap) {
           id = id.toString();
-          instance = this.identityMap[id];
+          instance = this.identityMap.get(id);
 
           if (!instance) {
-            this.identityMap[id] = instance = this._super.call(this, { data: data });
+            instance = this._super.call(this, { data: data });
+            this.identityMap.put(id, instance);
           } else {
             instance.updateWithApiData(data);
           }
@@ -1023,6 +1027,10 @@
         classOptions.parse = options.parse;
       }
 
+      if (options.identityMapLimit) {
+        classOptions.identityMapLimit = options.identityMapLimit;
+      }
+
       klass.reopenClass(classOptions);
 
       return klass;
@@ -1063,24 +1071,31 @@
   Ember.ResourceCollection = Ember.ArrayProxy.extend({
     isEmberResourceCollection: true,
     type: Ember.required(),
-    fetch: function() {
-      if (!Ember.get(this, 'isFetchable')) return $.when();
 
-      if (!this.prePopulated) {
-        var self = this;
-
-        if (this.deferedFetch && !Ember.get(this, 'isExpired')) return this.deferedFetch;
-
-        Ember.sendEvent(self, 'willFetch');
-
-        this.deferedFetch = this._fetch(function(json) {
-          Ember.set(self, 'content', self.parse(json));
-        });
-
-        this.deferedFetch.always(function() {
-          Ember.sendEvent(self, 'didFetch');
-        });
+    fetched: function() {
+      if(!this._fetchDfd) {
+        this._fetchDfd = $.Deferred();
       }
+      return this._fetchDfd;
+    },
+
+    fetch: function() {
+      if (!Ember.get(this, 'isFetchable') || Ember.get(this, 'prePopulated')) return $.when();
+
+      var self = this;
+
+      if (this.deferedFetch && !Ember.get(this, 'isExpired')) return this.deferedFetch;
+
+      Ember.sendEvent(self, 'willFetch');
+
+      this.deferedFetch = this._fetch(function(json) {
+        Ember.set(self, 'content', self.parse(json));
+      });
+
+      this.deferedFetch.always(function() {
+        Ember.sendEvent(self, 'didFetch');
+        self.fetched().resolve();
+      });
       return this.deferedFetch;
     },
     _resolveType: function() {
@@ -1093,6 +1108,8 @@
       this._resolveType();
       return Ember.Resource.ajax({
         url: this.resolveUrl(),
+        resource: this,
+        operation: 'read',
         success: callback
       });
     },
@@ -1131,7 +1148,7 @@
     }.property().cacheable(),
 
     autoFetchOnExpiry: function() {
-      if (Ember.get(this, 'isExpired') && Ember.get(this, 'hasArrayObservers')) {
+      if (Ember.get(this, 'isAutoFetchable') && Ember.get(this, 'isExpired') && Ember.get(this, 'hasArrayObservers')) {
         this.fetch();
       }
     }.observes('isExpired', 'hasArrayObservers'),
@@ -1145,6 +1162,7 @@
 
   Ember.ResourceCollection.reopenClass({
     isEmberResourceCollection: true,
+    identityMapLimit: Ember.Resource.IdentityMap.DEFAULT_IDENTITY_MAP_LIMIT * 5,
     create: function(options) {
       options = options || {};
       var content = options.content;
@@ -1155,10 +1173,10 @@
       var instance;
 
       if (!options.prePopulated && options.url) {
-        this.identityMap = this.identityMap || {};
+        this.identityMap = this.identityMap || new Ember.Resource.IdentityMap(this.identityMapLimit);
         var identity = [options.type, options.url];
-        instance = this.identityMap[identity] || this._super.call(this, options);
-        this.identityMap[identity] = instance;
+        instance = this.identityMap.get(identity) || this._super.call(this, options);
+        this.identityMap.put(identity, instance);
       }
 
       if (!instance) {
