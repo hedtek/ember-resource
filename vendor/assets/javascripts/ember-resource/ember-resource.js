@@ -1,7 +1,9 @@
-(function(undefined) {
+(function(exports) {
 
   var expandSchema, expandSchemaItem, createSchemaProperties,
       mergeSchemas;
+
+  var Ember = exports.Ember;
 
   function isString(obj) {
     return !!(obj === '' || (obj && obj !== String && obj.charCodeAt && obj.substr));
@@ -561,13 +563,12 @@
   };
 
   Ember.Resource.ajax = function(options) {
-    if(window.stopHere) { debugger }
     options.dataType = options.dataType || 'json';
     options.type     = options.type     || 'GET';
 
     if(options.error) {
       options.error = errorHandlerWithContext(options.error, options);
-    } else if(Em.Resource.errorHandler) {
+    } else if(Ember.Resource.errorHandler) {
       options.error = errorHandlerWithContext(Ember.Resource.errorHandler, options);
     }
 
@@ -643,6 +644,11 @@
 
         Ember.addListener(this, 'didFetch', this, function() {
           Ember.set(self, 'resourceState', Ember.Resource.Lifecycle.FETCHED);
+          updateExpiry();
+        });
+
+        Ember.addListener(this, 'didFail', this, function() {
+          Ember.set(self, 'resourceState', Ember.Resource.Lifecycle.UNFETCHED);
           updateExpiry();
         });
 
@@ -742,6 +748,7 @@
     didFetch: function() {},
     willSave: function() {},
     didSave: function() {},
+    didFail: function() {},
 
     fetched: function() {
       if(!this._fetchDfd) {
@@ -773,10 +780,20 @@
         }
       });
 
-      this.deferedFetch.always(function() {
+      this.deferedFetch.fail(function() {
+        self.didFail.call(self);
+        Ember.sendEvent(self, 'didFail');
+        self.fetched().reject();
+      });
+
+      this.deferedFetch.success(function() {
         self.didFetch.call(self);
         Ember.sendEvent(self, 'didFetch');
         self.fetched().resolve();
+      });
+
+      this.deferedFetch.always(function() {
+        self.deferedFetch = null;
       });
 
       return this.deferedFetch;
@@ -865,7 +882,6 @@
       Ember.set(this, 'resourceState', Ember.Resource.Lifecycle.DESTROYING);
       return Ember.Resource.ajax({
         type: 'DELETE',
-        resource: this,
         operation: 'destroy',
         url:  this.resourceURL(),
         resource: this
@@ -954,6 +970,8 @@
             this.identityMap.put(id, instance);
           } else {
             instance.updateWithApiData(data);
+            // ignore incoming resourceState argument
+            delete options.resourceState;
           }
         } else {
           instance = this._super.call(this, { data: data });
@@ -1095,6 +1113,7 @@
       this.deferedFetch.always(function() {
         Ember.sendEvent(self, 'didFetch');
         self.fetched().resolve();
+        self.deferredFetch = null;
       });
       return this.deferedFetch;
     },
@@ -1156,7 +1175,7 @@
     toJSON: function() {
       return this.map(function(item) {
         return item.toJSON();
-      })
+      });
     }
   }, Ember.Resource.Lifecycle.prototypeMixin);
 
@@ -1190,4 +1209,4 @@
       return instance;
     }
   }, Ember.Resource.Lifecycle.classMixin);
-}());
+}(this));
